@@ -2,11 +2,14 @@ package com.orderflow.controller;
 
 import com.orderflow.entity.Order;
 import com.orderflow.entity.OrderItem;
+import com.orderflow.entity.OrderAuditLog;
 import com.orderflow.entity.Product;
 import com.orderflow.entity.User;
+import com.orderflow.repository.OrderAuditRepository;
 import com.orderflow.repository.OrderRepository;
 import com.orderflow.repository.ProductRepository;
 import com.orderflow.repository.UserRepository;
+import com.orderflow.service.OrderWorkflowService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,15 +27,21 @@ public class OrderController {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final OrderAuditRepository auditRepository;
+    private final OrderWorkflowService workflowService;
     private final JdbcTemplate jdbcTemplate;
 
     public OrderController(OrderRepository orderRepository,
                            ProductRepository productRepository,
                            UserRepository userRepository,
+                           OrderAuditRepository auditRepository,
+                           OrderWorkflowService workflowService,
                            JdbcTemplate jdbcTemplate) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
+        this.auditRepository = auditRepository;
+        this.workflowService = workflowService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -113,5 +122,30 @@ public class OrderController {
                         "exactReason", root.getMessage() != null ? root.getMessage() : e.toString()
                     ));
         }
+    }
+
+    // State Machine: Update Status
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateOrderStatus(@PathVariable UUID id, @RequestBody Map<String, String> payload) {
+        try {
+            String targetStatus = payload.get("status");
+            String notes = payload.getOrDefault("notes", "Status updated via API");
+            
+            UUID actorId = userRepository.findAll().stream().findFirst().map(User::getId).orElse(UUID.randomUUID());
+
+            Order updatedOrder = workflowService.transitionOrderStatus(id, targetStatus, actorId, notes);
+            return ResponseEntity.ok(updatedOrder);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Audit Trail: Get history of status changes for an order
+    @GetMapping("/{id}/audit-logs")
+    public ResponseEntity<?> getOrderAudits(@PathVariable UUID id) {
+        List<OrderAuditLog> logs = auditRepository.findByOrderId(id);
+        return ResponseEntity.ok(logs);
     }
 }
