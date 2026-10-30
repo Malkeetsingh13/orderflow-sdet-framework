@@ -1,0 +1,13 @@
+# Backend build directories
+backend/target/
+**/target/
+*.class
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS files
+Thumbs.db
+.DS_Store
