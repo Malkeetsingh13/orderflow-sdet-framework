@@ -15,7 +15,7 @@ api.interceptors.request.use((config) => {
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('jwt_token') || '');
   const [userEmail, setUserEmail] = useState(localStorage.getItem('user_email') || '');
-  const [currentView, setCurrentView] = useState('shop'); // 'shop' | 'cart' | 'login' | 'register' | 'orders' | 'specs'
+  const [currentView, setCurrentView] = useState('shop'); // 'shop' | 'cart' | 'login' | 'register' | 'orders' | 'specs' | 'admin'
   
   const [loginEmail, setLoginEmail] = useState('testuser@orderflow.com');
   const [loginPassword, setLoginPassword] = useState('mypassword123');
@@ -23,6 +23,13 @@ export default function App() {
   const [regFullName, setRegFullName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+
+  // New Product Form State (Admin)
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdSku, setNewProdSku] = useState('');
+  const [newProdPrice, setNewProdPrice] = useState('');
+  const [newProdStock, setNewProdStock] = useState('');
+  const [newProdDesc, setNewProdDesc] = useState('');
 
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
@@ -82,6 +89,44 @@ export default function App() {
     setCart([]);
     setCurrentView('shop');
     setSuccessMsg('Logged out successfully.');
+  };
+
+  const handleCreateProduct = async (e) => {
+    e.preventDefault();
+    try {
+      setError('');
+      await api.post('/products', {
+        name: newProdName,
+        sku: newProdSku,
+        price: parseFloat(newProdPrice),
+        stockQuantity: parseInt(newProdStock),
+        description: newProdDesc
+      });
+      setSuccessMsg('Product created successfully and added to catalog!');
+      setNewProdName('');
+      setNewProdSku('');
+      setNewProdPrice('');
+      setNewProdStock('');
+      setNewProdDesc('');
+      fetchProducts();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to create product. Check SKU uniqueness.');
+    }
+  };
+
+  const handleRestock = async (productId, currentStock) => {
+    const addQty = prompt('Enter quantity to restock:', '10');
+    if (!addQty) return;
+    try {
+      setError('');
+      await api.patch(`/products/${productId}`, {
+        stockQuantity: currentStock + parseInt(addQty)
+      });
+      setSuccessMsg('Inventory restocked successfully!');
+      fetchProducts();
+    } catch (err) {
+      setError('Failed to update stock.');
+    }
   };
 
   const addToCart = (product) => {
@@ -148,6 +193,7 @@ export default function App() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <button onClick={() => setCurrentView('shop')} style={{ background: 'transparent', border: 'none', color: currentView === 'shop' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Storefront</button>
+          <button onClick={() => setCurrentView('admin')} style={{ background: 'transparent', border: 'none', color: currentView === 'admin' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Admin Panel</button>
           <button onClick={() => setCurrentView('cart')} style={{ background: 'transparent', border: 'none', color: currentView === 'cart' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer', position: 'relative' }}>
             Cart {totalCartItems > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', fontWeight: 700, marginLeft: '4px' }}>{totalCartItems}</span>}
           </button>
@@ -176,7 +222,6 @@ export default function App() {
         {/* VIEW 1: STOREFRONT */}
         {currentView === 'shop' && (
           <div>
-            {/* Promotional Hero Banners */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '40px' }}>
               <div style={{ background: 'linear-gradient(135deg, #ea580c, #c2410c)', borderRadius: '16px', padding: '25px', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '180px' }}>
                 <div>
@@ -213,13 +258,11 @@ export default function App() {
                 {products.map((product) => (
                   <div key={product.id} style={{ background: '#12141c', border: '1px solid #1e2230', borderRadius: '16px', padding: '24px', display: 'flex', gap: '30px', alignItems: 'center', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}>
                     
-                    {/* Product Icon Box Container */}
                     <div style={{ background: '#181b26', padding: '15px', borderRadius: '12px', border: '1px solid #1e2230', minWidth: '180px', height: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ fontSize: '42px', marginBottom: '8px' }}>{product.name.toLowerCase().includes('mouse') ? '🖱️' : '⌨️'}</span>
                       <span style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase' }}>Verified Stock</span>
                     </div>
 
-                    {/* Product Details */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                       <div>
                         <span style={{ background: '#374151', color: '#9ca3af', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' }}>Sponsored</span>
@@ -247,7 +290,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Add to Cart Button (Amazon Yellow Style) */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                         <button 
                           onClick={() => addToCart(product)}
@@ -279,7 +321,60 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 2: SPECS VIEW */}
+        {/* VIEW 2: ADMIN PANEL */}
+        {currentView === 'admin' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
+              <h2 style={{ fontSize: '22px', marginBottom: '15px', color: '#f3f4f6' }}>🛠️ Admin Panel: Create New Product</h2>
+              <form onSubmit={handleCreateProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', fontWeight: 600 }}>Product Name</label>
+                  <input type="text" value={newProdName} onChange={e => setNewProdName(e.target.value)} placeholder="Wireless Mechanical Keyboard" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #1e2230', background: '#181b26', color: '#fff' }} required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', fontWeight: 600 }}>SKU</label>
+                  <input type="text" value={newProdSku} onChange={e => setNewProdSku(e.target.value)} placeholder="KB-W-03" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #1e2230', background: '#181b26', color: '#fff' }} required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', fontWeight: 600 }}>Price ($)</label>
+                  <input type="number" step="0.01" value={newProdPrice} onChange={e => setNewProdPrice(e.target.value)} placeholder="89.99" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #1e2230', background: '#181b26', color: '#fff' }} required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', fontWeight: 600 }}>Stock Quantity</label>
+                  <input type="number" value={newProdStock} onChange={e => setNewProdStock(e.target.value)} placeholder="50" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #1e2230', background: '#181b26', color: '#fff' }} required />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '5px', fontWeight: 600 }}>Description</label>
+                  <input type="text" value={newProdDesc} onChange={e => setNewProdDesc(e.target.value)} placeholder="Ergonomic mechanical keyboard with custom switches..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #1e2230', background: '#181b26', color: '#fff' }} required />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <button type="submit" style={{ padding: '12px 25px', background: '#ffd814', color: '#0f1111', border: 'none', borderRadius: '20px', fontWeight: 700, cursor: 'pointer' }}>
+                    + Publish Product to Catalog
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
+              <h2 style={{ fontSize: '22px', marginBottom: '15px', color: '#f3f4f6' }}>📦 Inventory Restock Management</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {products.map(p => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#181b26', padding: '15px', borderRadius: '10px', border: '1px solid #1e2230' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#f3f4f6' }}>{p.name} <span style={{ fontSize: '12px', color: '#9ca3af' }}>({p.sku})</span></div>
+                      <div style={{ fontSize: '13px', color: '#22c55e' }}>Stock Level: {p.stockQuantity} units | Price: ${p.price}</div>
+                    </div>
+                    <button onClick={() => handleRestock(p.id, p.stockQuantity)} style={{ padding: '8px 16px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+                      Restock Stock ⚡
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3: SPECS VIEW */}
         {currentView === 'specs' && (
           <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '15px', color: '#f3f4f6' }}>SDET Architecture Specifications</h2>
@@ -306,7 +401,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 3: CART */}
+        {/* VIEW 4: CART */}
         {currentView === 'cart' && (
           <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '20px', color: '#f3f4f6' }}>Shopping Cart</h2>
@@ -353,7 +448,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 4: SIGN IN */}
+        {/* VIEW 5: SIGN IN */}
         {currentView === 'login' && (
           <div style={{ maxWidth: '420px', margin: '40px auto', background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '8px', textAlign: 'center', color: '#f3f4f6' }}>Sign In</h2>
@@ -371,7 +466,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 5: REGISTER */}
+        {/* VIEW 6: REGISTER */}
         {currentView === 'register' && (
           <div style={{ maxWidth: '420px', margin: '40px auto', background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '8px', textAlign: 'center', color: '#f3f4f6' }}>Create Account</h2>
@@ -393,7 +488,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 6: MY ORDERS */}
+        {/* VIEW 7: MY ORDERS */}
         {currentView === 'orders' && (
           <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '20px', color: '#f3f4f6' }}>Order History & State Lifecycle</h2>
