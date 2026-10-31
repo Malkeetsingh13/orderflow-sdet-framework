@@ -13,6 +13,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/products")
+@CrossOrigin(origins = "http://localhost:5173") // <-- Enables CORS for your React frontend
 public class ProductController {
 
     private final ProductRepository productRepository;
