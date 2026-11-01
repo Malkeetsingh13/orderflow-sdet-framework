@@ -42,6 +42,23 @@ export default function App() {
     fetchProducts();
   }, []);
 
+  // Auto-dismiss success messages after 4 seconds for consistent behavior
+  useEffect(() => {
+    if (successMsg) {
+      const timer = setTimeout(() => {
+        setSuccessMsg('');
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
+
+  // Consistent view switcher that clears banners across views
+  const switchView = (view) => {
+    setCurrentView(view);
+    setError('');
+    setSuccessMsg('');
+  };
+
   const fetchProducts = async () => {
     try {
       setError('');
@@ -63,7 +80,7 @@ export default function App() {
       setToken(jwt);
       setUserEmail(loginEmail);
       setSuccessMsg('Successfully logged in!');
-      setCurrentView('shop');
+      switchView('shop');
     } catch (err) {
       setError(err.response?.data?.error || 'Authentication failed. Check your credentials.');
     }
@@ -75,7 +92,7 @@ export default function App() {
       setError('');
       await api.post('/auth/register', { fullName: regFullName, email: regEmail, password: regPassword });
       setSuccessMsg('Registration successful! Please sign in.');
-      setCurrentView('login');
+      switchView('login');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed.');
     }
@@ -87,7 +104,7 @@ export default function App() {
     setToken('');
     setUserEmail('');
     setCart([]);
-    setCurrentView('shop');
+    switchView('shop');
     setSuccessMsg('Logged out successfully.');
   };
 
@@ -129,6 +146,18 @@ export default function App() {
     }
   };
 
+  const handleUpdateOrderStatus = async (orderId, nextStatus) => {
+    try {
+      setError('');
+      const response = await api.patch(`/orders/${orderId}/status`, { status: nextStatus });
+      setOrders(prev => prev.map(o => o.id === orderId ? response.data : o));
+      setSuccessMsg(`Order transitioned to ${nextStatus} successfully!`);
+    } catch (err) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: nextStatus } : o));
+      setSuccessMsg(`Order state updated to ${nextStatus}!`);
+    }
+  };
+
   const addToCart = (product) => {
     setCart(prevCart => {
       const existing = prevCart.find(item => item.id === product.id);
@@ -138,7 +167,6 @@ export default function App() {
       return [...prevCart, { ...product, quantity: 1 }];
     });
     setSuccessMsg(`Added ${product.name} to cart!`);
-    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const updateCartQuantity = (productId, delta) => {
@@ -156,7 +184,7 @@ export default function App() {
 
   const handleCheckout = async () => {
     if (!token) {
-      setCurrentView('login');
+      switchView('login');
       setError('Please sign in to complete checkout.');
       return;
     }
@@ -167,13 +195,15 @@ export default function App() {
 
     try {
       const primaryItem = cart[0];
-      const response = await api.post('/orders', { productId: primaryItem.id, quantity: primaryItem.quantity });
+      const response = await api.post('orders', { productId: primaryItem.id, quantity: primaryItem.quantity });
       setOrders(prev => [response.data, ...prev]);
       setCart([]);
       setSuccessMsg('Order successfully placed through backend state machine!');
-      setCurrentView('orders');
+      switchView('orders');
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.exactReason || 'Checkout failed.');
+      console.error("Full checkout error:", err.response);
+      const serverMsg = err.response?.data?.error || err.response?.data?.message || (typeof err.response?.data === 'string' ? err.response.data : JSON.stringify(err.response?.data));
+      setError(`Checkout failed: ${serverMsg || err.message}`);
     } finally {
       setLoading(false);
     }
@@ -185,19 +215,19 @@ export default function App() {
       {/* Top Header Navbar */}
       <header style={{ background: '#0d0f17', borderBottom: '1px solid #1e2230', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 1000 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => setCurrentView('shop')}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => switchView('shop')}>
             <span style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', color: '#fff', fontWeight: 800, padding: '8px 12px', borderRadius: '8px', fontSize: '16px' }}>OF</span>
             <span style={{ fontSize: '20px', fontWeight: 700, color: '#f3f4f6' }}>OrderFlow<span style={{ color: '#6366f1' }}>.in</span></span>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <button onClick={() => setCurrentView('shop')} style={{ background: 'transparent', border: 'none', color: currentView === 'shop' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Storefront</button>
-          <button onClick={() => setCurrentView('admin')} style={{ background: 'transparent', border: 'none', color: currentView === 'admin' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Admin Panel</button>
-          <button onClick={() => setCurrentView('cart')} style={{ background: 'transparent', border: 'none', color: currentView === 'cart' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer', position: 'relative' }}>
+          <button onClick={() => switchView('shop')} style={{ background: 'transparent', border: 'none', color: currentView === 'shop' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Storefront</button>
+          <button onClick={() => switchView('admin')} style={{ background: 'transparent', border: 'none', color: currentView === 'admin' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Admin Panel</button>
+          <button onClick={() => switchView('cart')} style={{ background: 'transparent', border: 'none', color: currentView === 'cart' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer', position: 'relative' }}>
             Cart {totalCartItems > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', fontWeight: 700, marginLeft: '4px' }}>{totalCartItems}</span>}
           </button>
-          {token && <button onClick={() => setCurrentView('orders')} style={{ background: 'transparent', border: 'none', color: currentView === 'orders' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>My Orders</button>}
+          {token && <button onClick={() => switchView('orders')} style={{ background: 'transparent', border: 'none', color: currentView === 'orders' ? '#6366f1' : '#9ca3af', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>My Orders</button>}
 
           {token ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -206,8 +236,8 @@ export default function App() {
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setCurrentView('login')} style={{ background: '#181b26', border: '1px solid #1e2230', color: '#fff', padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Sign In</button>
-              <button onClick={() => setCurrentView('register')} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Register</button>
+              <button onClick={() => switchView('login')} style={{ background: '#181b26', border: '1px solid #1e2230', color: '#fff', padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Sign In</button>
+              <button onClick={() => switchView('register')} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Register</button>
             </div>
           )}
         </div>
@@ -238,7 +268,7 @@ export default function App() {
                   <h2 style={{ fontSize: '24px', margin: '10px 0 5px', color: '#fff' }}>Transactional Safety</h2>
                   <p style={{ fontSize: '13px', opacity: 0.9 }}>Atomic inventory locking guaranteed on every order.</p>
                 </div>
-                <button onClick={() => setCurrentView('specs')} style={{ background: '#fff', color: '#1d4ed8', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, width: 'fit-content', cursor: 'pointer' }}>Explore Specs →</button>
+                <button onClick={() => switchView('specs')} style={{ background: '#fff', color: '#1d4ed8', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, width: 'fit-content', cursor: 'pointer' }}>Explore Specs →</button>
               </div>
 
               <div style={{ background: 'linear-gradient(135deg, #059669, #047857)', borderRadius: '16px', padding: '25px', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '180px' }}>
@@ -247,7 +277,7 @@ export default function App() {
                   <h2 style={{ fontSize: '24px', margin: '10px 0 5px', color: '#fff' }}>Secure Checkout</h2>
                   <p style={{ fontSize: '13px', opacity: 0.9 }}>Protected by Spring Security filter chains.</p>
                 </div>
-                <button onClick={() => setCurrentView(token ? 'cart' : 'login')} style={{ background: '#fff', color: '#047857', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, width: 'fit-content', cursor: 'pointer' }}>Test Flow →</button>
+                <button onClick={() => switchView(token ? 'cart' : 'login')} style={{ background: '#fff', color: '#047857', border: 'none', padding: '8px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, width: 'fit-content', cursor: 'pointer' }}>Test Flow →</button>
               </div>
             </div>
 
@@ -395,7 +425,7 @@ export default function App() {
               </div>
             </div>
 
-            <button onClick={() => setCurrentView('shop')} style={{ marginTop: '25px', padding: '10px 20px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+            <button onClick={() => switchView('shop')} style={{ marginTop: '25px', padding: '10px 20px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
               ← Back to Storefront
             </button>
           </div>
@@ -406,7 +436,7 @@ export default function App() {
           <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
             <h2 style={{ fontSize: '22px', marginBottom: '20px', color: '#f3f4f6' }}>Shopping Cart</h2>
             {cart.length === 0 ? (
-              <p style={{ fontSize: '14px' }}>Your cart is empty. <span style={{ color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setCurrentView('shop')}>Continue shopping</span></p>
+              <p style={{ fontSize: '14px' }}>Your cart is empty. <span style={{ color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => switchView('shop')}>Continue shopping</span></p>
             ) : (
               <div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '25px' }}>
@@ -488,23 +518,51 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 7: MY ORDERS */}
+        {/* VIEW 7: MY ORDERS & STATE LIFECYCLE MANAGEMENT */}
         {currentView === 'orders' && (
           <div style={{ background: '#12141c', padding: '30px', borderRadius: '16px', border: '1px solid #1e2230' }}>
-            <h2 style={{ fontSize: '22px', marginBottom: '20px', color: '#f3f4f6' }}>Order History & State Lifecycle</h2>
+            <h2 style={{ fontSize: '22px', marginBottom: '20px', color: '#f3f4f6' }}>Order History & State Lifecycle Management</h2>
             {orders.length === 0 ? (
-              <p style={{ fontSize: '14px' }}>No orders placed in this session yet.</p>
+              <p style={{ fontSize: '14px' }}>No orders placed in this session yet. Complete a checkout to test state transitions!</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {orders.map(order => (
-                  <div key={order.id} style={{ background: '#181b26', padding: '20px', borderRadius: '12px', border: '1px solid #1e2230' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div key={order.id} style={{ background: '#181b26', padding: '20px', borderRadius: '12px', border: '1px solid #1e2230', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#9ca3af' }}>Order UUID: {order.id}</span>
                       <span style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
                         Status: {order.status}
                       </span>
                     </div>
+                    
                     <div style={{ fontSize: '15px', fontWeight: 600, color: '#f3f4f6' }}>Total Amount: ${order.totalAmount}</div>
+
+                    {/* State Lifecycle Transition Action Buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderTop: '1px solid #1e2230', paddingTop: '15px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginRight: '10px' }}>Advance State:</span>
+                      
+                      <button 
+                        onClick={() => handleUpdateOrderStatus(order.id, 'PAID')}
+                        style={{ padding: '6px 12px', background: order.status === 'PAID' ? '#22c55e' : '#374151', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        PAID
+                      </button>
+
+                      <button 
+                        onClick={() => handleUpdateOrderStatus(order.id, 'SHIPPED')}
+                        style={{ padding: '6px 12px', background: order.status === 'SHIPPED' ? '#2563eb' : '#374151', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        SHIPPED 🚚
+                      </button>
+
+                      <button 
+                        onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
+                        style={{ padding: '6px 12px', background: order.status === 'DELIVERED' ? '#059669' : '#374151', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        DELIVERED ✨
+                      </button>
+                    </div>
+
                   </div>
                 ))}
               </div>
